@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Phone, MapPin, Clock } from "lucide-react"
 import { database } from "@/lib/firebase"
 import { ref, push } from "firebase/database"
-import { useToast } from "@/components/ui/use-toast"
+import { useToast } from "@/hooks/use-toast"
 
 export default function ReservationPage() {
   const { toast } = useToast()
@@ -32,11 +32,11 @@ export default function ReservationPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     const reservationsRef = ref(database, "reservations")
-    push(reservationsRef, { ...formData, status: "pending" })
+    push(reservationsRef, { ...formData, status: "pending", createdAt: new Date().toISOString() })
       .then(() => {
         toast({
-          title: "Reservación Enviada",
-          description: "Gracias por reservar. Nos pondremos en contacto para confirmar.",
+          title: "¡Reservación Realizada! 😊",
+          description: "Se realizó su reservación, nos pondremos en contacto con usted para terminar de confirmar.",
         })
         setFormData({ name: "", phone: "", people: "", date: "", time: "", comments: "" })
       })

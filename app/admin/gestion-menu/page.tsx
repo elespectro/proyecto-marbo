@@ -4,16 +4,18 @@ import type React from "react"
 
 import { useRouter } from "next/navigation"
 import { database, storage } from "@/lib/firebase"
-import { ref, push, onValue, remove } from "firebase/database"
+import { ref, push, onValue, remove, update } from "firebase/database"
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { useToast } from "@/components/ui/use-toast"
+import { useToast } from "@/hooks/use-toast"
 import Image from "next/image"
 import Link from "next/link"
+import { Edit, Trash2 } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
 type Product = {
   id: string
@@ -31,6 +33,8 @@ export default function MenuManagementPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [newProduct, setNewProduct] = useState({ name: "", price: "", category: "", description: "" })
   const [imageFile, setImageFile] = useState<File | null>(null)
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
 
   useEffect(() => {
     const isAuthenticated = sessionStorage.getItem("isAdminAuthenticated")
@@ -63,19 +67,23 @@ export default function MenuManagementPage() {
 
   const handleAddProduct = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!newProduct.name || !newProduct.price || !newProduct.category || !imageFile) {
+    if (!newProduct.name || !newProduct.price || !newProduct.category) {
       toast({
         title: "Campos requeridos",
-        description: "Por favor, completa todos los campos y selecciona una imagen.",
+        description: "Por favor, completa todos los campos obligatorios.",
         variant: "destructive",
       })
       return
     }
 
     try {
-      const imageStorageRef = storageRef(storage, `menu-images/${Date.now()}_${imageFile.name}`)
-      await uploadBytes(imageStorageRef, imageFile)
-      const imageUrl = await getDownloadURL(imageStorageRef)
+      let imageUrl = "/placeholder.svg?height=200&width=300"
+
+      if (imageFile) {
+        const imageStorageRef = storageRef(storage, `menu-images/${Date.now()}_${imageFile.name}`)
+        await uploadBytes(imageStorageRef, imageFile)
+        imageUrl = await getDownloadURL(imageStorageRef)
+      }
 
       const menuRef = ref(database, "menu")
       await push(menuRef, {
@@ -87,7 +95,8 @@ export default function MenuManagementPage() {
       toast({ title: "Éxito", description: "Producto añadido correctamente." })
       setNewProduct({ name: "", price: "", category: "", description: "" })
       setImageFile(null)
-      ;(document.getElementById("image") as HTMLInputElement).value = ""
+      const fileInput = document.getElementById("image") as HTMLInputElement
+      if (fileInput) fileInput.value = ""
     } catch (error) {
       console.error(error)
       toast({ title: "Error", description: "No se pudo añadir el producto.", variant: "destructive" })
@@ -109,6 +118,51 @@ export default function MenuManagementPage() {
       item.category.toLowerCase().includes(searchTerm.toLowerCase()),
   )
 
+  const handleEditInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { id, value } = e.target
+    if (editingProduct) {
+      setEditingProduct((prev) => (prev ? { ...prev, [id]: value } : null))
+    }
+  }
+
+  const handleEditProduct = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingProduct) return
+
+    try {
+      let imageUrl = editingProduct.imageUrl
+
+      if (imageFile) {
+        const imageStorageRef = storageRef(storage, `menu-images/${Date.now()}_${imageFile.name}`)
+        await uploadBytes(imageStorageRef, imageFile)
+        imageUrl = await getDownloadURL(imageStorageRef)
+      }
+
+      const productRef = ref(database, `menu/${editingProduct.id}`)
+      await update(productRef, {
+        name: editingProduct.name,
+        price: Number.parseFloat(editingProduct.price.toString()),
+        category: editingProduct.category,
+        description: editingProduct.description,
+        imageUrl: imageUrl,
+      })
+
+      toast({ title: "Éxito", description: "Producto actualizado correctamente." })
+      setEditingProduct(null)
+      setImageFile(null)
+      setIsEditDialogOpen(false)
+    } catch (error) {
+      console.error("Error updating product:", error)
+      toast({ title: "Error", description: "No se pudo actualizar el producto.", variant: "destructive" })
+    }
+  }
+
+  const openEditDialog = (product: Product) => {
+    setEditingProduct(product)
+    setImageFile(null)
+    setIsEditDialogOpen(true)
+  }
+
   return (
     <div className="min-h-screen bg-brand-light-yellow p-8">
       <Button asChild variant="link" className="text-brand-brown mb-4">
@@ -129,7 +183,7 @@ export default function MenuManagementPage() {
               </div>
               <div>
                 <Label htmlFor="price">Precio</Label>
-                <Input id="price" type="number" value={newProduct.price} onChange={handleInputChange} />
+                <Input id="price" type="number" step="0.01" value={newProduct.price} onChange={handleInputChange} />
               </div>
               <div>
                 <Label htmlFor="category">Categoría</Label>
@@ -140,7 +194,7 @@ export default function MenuManagementPage() {
                 <Textarea id="description" value={newProduct.description} onChange={handleInputChange} />
               </div>
               <div>
-                <Label htmlFor="image">Foto</Label>
+                <Label htmlFor="image">Foto (Opcional)</Label>
                 <Input id="image" type="file" onChange={handleFileChange} accept="image/*" />
               </div>
               <Button type="submit" className="w-full bg-brand-orange text-brand-brown font-bold">
@@ -162,7 +216,7 @@ export default function MenuManagementPage() {
             {filteredMenu.map((item) => (
               <Card key={item.id} className="flex items-center p-4 bg-white/80 border-brand-orange">
                 <Image
-                  src={item.imageUrl || "/placeholder.svg"}
+                  src={item.imageUrl || "/placeholder.svg?height=80&width=80&query=comida"}
                   alt={item.name}
                   width={80}
                   height={80}
@@ -174,14 +228,67 @@ export default function MenuManagementPage() {
                     {item.category} - ${item.price.toFixed(2)}
                   </p>
                 </div>
-                <Button onClick={() => handleDeleteProduct(item.id)} variant="destructive" size="sm">
-                  Eliminar
-                </Button>
+                <div className="flex gap-2">
+                  <Button onClick={() => openEditDialog(item)} variant="outline" size="sm">
+                    <Edit className="w-4 h-4" />
+                  </Button>
+                  <Button onClick={() => handleDeleteProduct(item.id)} variant="destructive" size="sm">
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
               </Card>
             ))}
           </div>
         </div>
       </div>
+
+      {/* Edit Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar Producto</DialogTitle>
+          </DialogHeader>
+          {editingProduct && (
+            <form onSubmit={handleEditProduct} className="space-y-4">
+              <div>
+                <Label htmlFor="edit-name">Nombre</Label>
+                <Input id="name" value={editingProduct.name} onChange={handleEditInputChange} required />
+              </div>
+              <div>
+                <Label htmlFor="edit-price">Precio</Label>
+                <Input
+                  id="price"
+                  type="number"
+                  step="0.01"
+                  value={editingProduct.price}
+                  onChange={handleEditInputChange}
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-category">Categoría</Label>
+                <Input id="category" value={editingProduct.category} onChange={handleEditInputChange} required />
+              </div>
+              <div>
+                <Label htmlFor="edit-description">Descripción</Label>
+                <Textarea id="description" value={editingProduct.description} onChange={handleEditInputChange} />
+              </div>
+              <div>
+                <Label htmlFor="edit-image">Nueva Foto (Opcional)</Label>
+                <Input id="edit-image" type="file" onChange={handleFileChange} accept="image/*" />
+              </div>
+              <div className="flex gap-2">
+                <Button type="submit" className="flex-1 bg-brand-orange text-brand-brown font-bold">
+                  Guardar Cambios
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                  Cancelar
+                </Button>
+              </div>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

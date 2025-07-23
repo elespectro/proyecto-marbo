@@ -1,13 +1,12 @@
 "use client"
 import { useState } from "react"
 import type React from "react"
-
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import { useToast } from "@/components/ui/use-toast"
+import { useToast } from "@/hooks/use-toast"
 
 export default function AdminLoginPage() {
   const router = useRouter()
@@ -18,7 +17,7 @@ export default function AdminLoginPage() {
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault()
     // Lógica de autenticación simple. Reemplazar con una real.
-    if (username === "admin" && password === "password") {
+    if (username === "Administrador" && password === "Marbo#25") {
       // En una app real, guardarías un token de sesión.
       sessionStorage.setItem("isAdminAuthenticated", "true")
       router.push("/admin/dashboard")
